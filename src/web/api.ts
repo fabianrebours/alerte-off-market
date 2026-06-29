@@ -145,6 +145,19 @@ export class ErreurAuth extends Error {
 
 const CLE_TOKEN = 'apiToken';
 export function definirToken(token: string): void { localStorage.setItem(CLE_TOKEN, token.trim()); }
+export function effacerToken(): void { localStorage.removeItem(CLE_TOKEN); }
+
+/**
+ * Capte le jeton de session renvoyé par le login SSO en fragment d'URL
+ * (#token=…), le stocke, puis nettoie l'URL. À appeler au démarrage de l'app.
+ */
+export function capterTokenSSO(): void {
+  const m = location.hash.match(/[#&]token=([^&]+)/);
+  if (m) {
+    definirToken(decodeURIComponent(m[1]));
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+}
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem(CLE_TOKEN);

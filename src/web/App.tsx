@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api, definirToken, ErreurAuth, type StatutIntegrations } from './api.ts';
+import { useEffect, useState } from 'react';
+import { api, capterTokenSSO, effacerToken, ErreurAuth, type StatutIntegrations } from './api.ts';
 import { ListeBiens } from './components/ListeBiens.tsx';
 import { DetailBien } from './components/DetailBien.tsx';
 import { Journal } from './components/Journal.tsx';
@@ -14,13 +14,14 @@ export function App() {
   const [refSelectionne, setRefSelectionne] = useState<string | null>(null);
 
   useEffect(() => {
+    capterTokenSSO(); // récupère le jeton renvoyé par le login Google (#token=…)
     api.statut().then(setStatut).catch((e) => {
       if (e instanceof ErreurAuth) setBesoinAuth(true);
       else setStatut(null);
     });
   }, []);
 
-  if (besoinAuth) return <PortailToken />;
+  if (besoinAuth) return <PortailGoogle />;
 
   return (
     <div className="min-h-screen">
@@ -59,6 +60,13 @@ export function App() {
                 )}
               </>
             )}
+            <button
+              onClick={() => { effacerToken(); window.location.reload(); }}
+              className="text-white/60 hover:text-white"
+              title="Se déconnecter"
+            >
+              Déconnexion
+            </button>
           </div>
         </div>
       </header>
@@ -91,30 +99,23 @@ function Pastille({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-/** Portail d'accès : saisie du jeton API (stocké en localStorage) quand l'API renvoie 401. */
-function PortailToken() {
-  const [valeur, setValeur] = useState('');
-  const valider = (e: FormEvent) => {
-    e.preventDefault();
-    if (!valeur.trim()) return;
-    definirToken(valeur);
-    window.location.reload();
-  };
+/** Portail d'accès : connexion SSO Google (@matera.eu) quand l'API renvoie 401. */
+function PortailGoogle() {
   return (
     <div className="min-h-screen flex items-center justify-center px-6">
-      <form onSubmit={valider} className="bg-white rounded-2xl shadow-sm p-8 max-w-sm w-full">
+      <div className="bg-white rounded-2xl shadow-sm p-8 max-w-sm w-full text-center">
         <div className="text-bordeaux-800 font-bold tracking-wide text-sm mb-1">MATERA · ALERTE OFF-MARKET</div>
-        <h1 className="text-lg font-bold text-slate-800 mb-2">Accès protégé</h1>
-        <p className="text-sm text-slate-500 mb-4">Colle le jeton d'accès (fourni par l'admin) pour utiliser l'outil.</p>
-        <input
-          type="password" value={valeur} onChange={(e) => setValeur(e.target.value)} autoFocus
-          placeholder="Jeton d'accès"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-matera-500 focus:border-matera-500 outline-none"
-        />
-        <button type="submit" className="mt-4 w-full px-4 py-2.5 bg-matera-700 text-white rounded-lg text-sm font-semibold hover:bg-matera-900">
-          Entrer
-        </button>
-      </form>
+        <h1 className="text-lg font-bold text-slate-800 mb-2">Connexion</h1>
+        <p className="text-sm text-slate-500 mb-6">
+          Connecte-toi avec ton compte Google <strong>@matera.eu</strong> pour accéder à l'outil.
+        </p>
+        <a
+          href="/auth/login"
+          className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-matera-700 text-white rounded-lg text-sm font-semibold hover:bg-matera-900"
+        >
+          Se connecter avec Google
+        </a>
+      </div>
     </div>
   );
 }

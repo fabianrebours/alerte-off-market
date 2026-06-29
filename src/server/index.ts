@@ -8,6 +8,8 @@ import { biensRouter } from './routes/biens.ts';
 import { optoutRouter } from './routes/optout.ts';
 import { oauthRouter } from './routes/oauth.ts';
 import { trackingRouter } from './routes/tracking.ts';
+import { authRouter } from './routes/auth.ts';
+import { verifierSession } from './auth/session.ts';
 import { demarrerCronModelo } from './modelo/poller.ts';
 import { demarrerCronFileAttente } from './email/fileAttente.ts';
 import { delegationDisponible } from './email/gmailDelegation.ts';
@@ -28,16 +30,21 @@ app.use((_req, res, next) => {
 });
 
 /**
- * Auth API : jeton Bearer comparé à `FRONT_API_TOKEN` (temps constant).
- * Vide → API ouverte (dev local). Protège TOUT /api, y compris /api/statut.
+ * Auth API : accepte soit une SESSION SSO Google signée (login @matera.eu via
+ * /auth/login), soit le jeton statique `FRONT_API_TOKEN` (accès admin/secours).
+ * Aucun secret configuré → API ouverte (dev local). Protège TOUT /api.
  */
 function verifierToken(req: express.Request, res: express.Response, next: express.NextFunction): void {
-  const attendu = config.frontApiToken;
-  if (!attendu) return next();
+  const tokenStatique = config.frontApiToken;
+  const secretSession = config.authSecret;
+  if (!tokenStatique && !secretSession) return next(); // dev local : API ouverte
   const fourni = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-  const a = Buffer.from(fourni), b = Buffer.from(attendu);
-  if (a.length === b.length && timingSafeEqual(a, b)) return next();
-  res.status(401).json({ error: 'Accès non autorisé : jeton manquant ou invalide.' });
+  if (tokenStatique) {
+    const a = Buffer.from(fourni), b = Buffer.from(tokenStatique);
+    if (a.length === b.length && timingSafeEqual(a, b)) return next();
+  }
+  if (secretSession && verifierSession(fourni)) return next();
+  res.status(401).json({ error: 'Accès non autorisé : connexion requise.' });
 }
 app.use('/api', verifierToken);
 
@@ -47,6 +54,7 @@ app.get('/api/statut', (_req, res) => {
 });
 
 app.use('/api', biensRouter);
+app.use('/', authRouter); // /auth/login + /auth/callback (SSO Google)
 app.use('/', optoutRouter);
 app.use('/', oauthRouter);
 app.use('/', trackingRouter); // /o (pixel ouverture) + /c (redirection clic)
@@ -57,7 +65,7 @@ if (existsSync(webDist)) {
   app.use(express.static(webDist));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path === '/desinscription' || req.path.startsWith('/oauth')
-      || req.path === '/o' || req.path === '/c') return next();
+      || req.path.startsWith('/auth') || req.path === '/o' || req.path === '/c') return next();
     res.sendFile(resolve(webDist, 'index.html'));
   });
 }

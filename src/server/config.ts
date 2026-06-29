@@ -25,6 +25,11 @@ export const config = {
   /** Jeton d'accès à l'API (Bearer). Vide = API ouverte (dev local uniquement). */
   frontApiToken: env('FRONT_API_TOKEN'),
 
+  /** Secret HMAC qui SIGNE les sessions SSO Google. À défaut d'AUTH_SECRET dédié,
+   *  on réutilise GOOGLE_TOKEN_SECRET (déjà requis pour le chiffrement). Vide en
+   *  dev local → SSO inactif (API ouverte). */
+  authSecret: env('AUTH_SECRET') || env('GOOGLE_TOKEN_SECRET') || env('FRONT_API_TOKEN'),
+
   modelo: {
     apiKey: env('MODELO_API_KEY'),
     baseUrl: env('MODELO_BASE_URL', 'https://webapi.netty.fr/apiv1').replace(/\/$/, ''),
