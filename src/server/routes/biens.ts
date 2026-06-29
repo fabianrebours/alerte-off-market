@@ -5,7 +5,7 @@ import { config } from '../config.ts';
 import {
   getBienDetecte, listBiensDetectes, setStatutBien, setBrouillon,
   listEnvois, recordEnvoi, emailDejaContactePourBien, emailContacteDepuis, listDesinscrits,
-  enqueueEnvoi, planningBien, countFileEnAttente, listAgentsConnectes,
+  enqueueEnvoi, planningBien, countFileEnAttente, listAgentsConnectes, statsCampagne,
   type BienDetecte, type StatutBien,
 } from '../db.ts';
 import { traiterFileAttente } from '../email/fileAttente.ts';
@@ -165,7 +165,7 @@ biensRouter.get('/biens/:ref', async (req, res) => {
     // D'où partira le mail (délégation domaine → token agent → Resend).
     const c = await resoudreCanal();
     const expedition = { canal: c.canal, source: c.source, expediteur: c.expediteur };
-    res.json({ detecte, brouillon, center, copros, nbEligibles, expedition, lienAnnonce: lienAnnonce(detecte.bien) });
+    res.json({ detecte, brouillon, center, copros, nbEligibles, expedition, lienAnnonce: lienAnnonce(detecte.bien), stats: statsCampagne(req.params.ref) });
   } catch (e) {
     res.status(502).json({ error: `Omni : ${(e as Error).message}` });
   }
@@ -270,8 +270,8 @@ biensRouter.post('/biens/:ref/envoyer', async (req, res) => {
     const token = randomUUID();
     const unsubscribeUrl = `${config.appBaseUrl}/desinscription?token=${token}`;
     const messageRendu = rendreMessage(message, formatDistance(d.distanceKm));
-    const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
-    const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
+    const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl, token });
+    const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl, token });
     const destinataireReel = config.sandbox ? config.testRecipient : email;
     const sujetFinal = config.sandbox ? `[TEST → ${email}] ${sujet}` : sujet;
     const base = {

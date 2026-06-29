@@ -65,8 +65,8 @@ export async function traiterFileAttente(): Promise<{ traites: number; envoyes: 
       const token = randomUUID();
       const unsubscribeUrl = `${config.appBaseUrl}/desinscription?token=${token}`;
       const messageRendu = rendreMessage(row.message, formatDistance(row.distance_km));
-      const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
-      const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
+      const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl, token });
+      const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl, token });
       const to = config.sandbox ? config.testRecipient : email;
       const subject = config.sandbox ? `[TEST → ${email}] ${row.sujet}` : row.sujet;
       const base = {

@@ -122,6 +122,21 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
         );
       })()}
 
+      {data.stats.envoyes > 0 && (
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          {[
+            { label: 'Contactés', val: data.stats.envoyes, pct: null as number | null },
+            { label: 'Ouvertures', val: data.stats.ouverts, pct: Math.round((100 * data.stats.ouverts) / data.stats.envoyes) },
+            { label: 'Clics', val: data.stats.cliques, pct: Math.round((100 * data.stats.cliques) / data.stats.envoyes) },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl shadow-sm px-4 py-3 text-center">
+              <div className="text-2xl font-bold text-slate-800">{s.val}</div>
+              <div className="text-xs text-slate-500">{s.label}{s.pct != null ? ` · ${s.pct}%` : ''}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ── Colonne gauche : le bien ── */}
         <div className="space-y-4">
@@ -137,9 +152,15 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
             <div className="p-4">
               <h2 className="font-bold text-slate-800">{b.titre ?? b.typeBien ?? 'Bien'}</h2>
               <div className="mt-1 flex flex-wrap gap-1">
-                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded">
-                  Sur le marché · off-market
-                </span>
+                {b.diffuse ? (
+                  <span className="text-xs bg-red-100 text-red-800 font-semibold px-2 py-0.5 rounded">
+                    ⚠ Diffusé sur {b.nbPortails} portail{b.nbPortails > 1 ? 's' : ''}
+                  </span>
+                ) : (
+                  <span className="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded">
+                    Off-market · pas en ligne
+                  </span>
+                )}
                 {b.mandatType && (
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded ${b.mandatType === 'exclusif' ? 'bg-bordeaux-100 text-bordeaux-800' : b.mandatType === 'semi_exclusif' ? 'bg-sable-100 text-sable-800' : b.mandatType === 'delegation' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700'}`}>
                     {b.mandatType === 'delegation'

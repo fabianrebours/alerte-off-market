@@ -48,7 +48,15 @@ export function genererBrouillonDefaut(bien: BienModelo): { sujet: string; messa
   const prenom = bien.agentNom?.trim().split(/\s+/)[0] || 'votre conseiller Matera';
   const tel = formatTelephone(bien.agentTelephone);
   const typeLower = (bien.typeBien ?? 'bien').toLowerCase();
-  const adresse = bien.adresse ?? 'quelques rues d\'ici';
+  // Confidentialité de l'adresse — liste blanche stricte : on ne divulgue la rue
+  // + n° QUE pour un mandat exclusif (le bien est verrouillé chez nous, aucun
+  // doute). Pour tout le reste — semi-exclusif, délégation, simple, ou type
+  // inconnu/non synchronisé (null) — on masque et on ne garde que le secteur.
+  // Principe : au moindre doute, on n'affiche pas l'adresse.
+  const secteur = [bien.codePostal, bien.ville].filter(Boolean).join(' ');
+  const lieu = bien.mandatType === 'exclusif' && bien.adresse
+    ? `au ${bien.adresse}`
+    : (secteur ? `dans votre quartier (${secteur})` : 'dans votre quartier');
   let carac = '';
   if (bien.pieces && bien.surface) carac = `C'est un ${bien.pieces} pièces de ${bien.surface} m². `;
   else if (bien.pieces) carac = `C'est un ${bien.pieces} pièces. `;
@@ -57,11 +65,11 @@ export function genererBrouillonDefaut(bien: BienModelo): { sujet: string; messa
   const sujet = `Un bien en off-market juste à côté de chez vous`;
   const message =
     `Bonjour,\n\n` +
-    `Je suis ${prenom}, l'agent immobilier Matera qui s'occupe des ventes sur votre secteur. ` +
-    `Comme votre copropriété est gérée par Matera, vous faites partie des premiers que je préviens.\n\n` +
-    `Je viens de rentrer ${article(bien.typeBien)} ${typeLower} à {{distance}} de chez vous, au ${adresse}. ` +
+    `Je suis ${prenom}, votre agent immobilier Matera chargé de votre secteur. ` +
+    `Votre copropriété étant gérée par Matera, vous faites partie de nos clients prioritaires.\n\n` +
+    `Je viens de rentrer ${article(bien.typeBien)} ${typeLower} à {{distance}} de chez vous, ${lieu}. ` +
     `${carac}Il n'est pas encore en ligne : je préfère en parler aux copropriétaires Matera du coin avant de le publier sur les sites.\n\n` +
-    `Je me suis dit que ça pouvait vous intéresser, pour vous ou pour un proche qui cherche à s'installer dans le quartier.\n\n` +
+    `Je me suis dit que ce bien pouvait vous intéresser, pour vous ou pour un proche qui cherche à s'installer dans le quartier.\n\n` +
     `Vous pouvez le découvrir ici : {{lien}}\n\n` +
     `Si vous souhaitez le visiter ou en parler, appelez-moi ou répondez à ce mail.\n\n` +
     `${prenom}${tel ? `\n${tel}` : ''}`;
@@ -72,6 +80,13 @@ interface EmailParams {
   bien: BienModelo;
   messageAgent: string;
   unsubscribeUrl: string;
+  /** Token de l'envoi. Si fourni → lien tracké (clic) + pixel (ouverture). */
+  token?: string;
+}
+
+/** URL de redirection trackée du clic sur le lien d'annonce. */
+function lienTracke(token: string): string {
+  return `${config.appBaseUrl}/c?token=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -79,10 +94,11 @@ interface EmailParams {
  * de carte ni de bloc centré, texte aligné à gauche pleine largeur, juste le
  * message + une photo, et un lien de désinscription discret (obligatoire RGPD).
  */
-export function construireEmailHtml({ bien, messageAgent, unsubscribeUrl }: EmailParams): string {
+export function construireEmailHtml({ bien, messageAgent, unsubscribeUrl, token }: EmailParams): string {
   const photo = bien.photos[0] ?? null;
   const titre = bien.titre ?? [bien.typeBien, bien.ville].filter(Boolean).join(' à ') ?? 'Bien';
-  const lien = lienAnnonce(bien);
+  // Clic tracké si on a un token (envoi réel), sinon lien direct (aperçu).
+  const lien = token ? lienTracke(token) : lienAnnonce(bien);
 
   let messageHtml = esc(messageAgent).replace(/\n/g, '<br>');
   // {{lien}} → lien cliquable libellé ; puis on rend cliquable toute URL restante.
@@ -90,17 +106,24 @@ export function construireEmailHtml({ bien, messageAgent, unsubscribeUrl }: Emai
     .replace(/\{\{\s*lien\s*\}\}/gi, `<a href="${lien}" style="color:#721C1F;text-decoration:underline;">Voir le bien et toutes les photos →</a>`)
     .replace(/(^|[\s(])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" style="color:#721C1F;text-decoration:underline;">$2</a>');
 
+  // Pixel d'ouverture (1×1 transparent) — seulement sur un envoi réel.
+  const pixel = token
+    ? `<img src="${config.appBaseUrl}/o?token=${encodeURIComponent(token)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;">`
+    : '';
+
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:16px;color:#222222;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;text-align:left;">
 ${messageHtml}
 ${photo ? `<div style="margin:16px 0;"><img src="${photo}" alt="${esc(titre)}" style="display:block;max-width:480px;width:100%;height:auto;"></div>` : ''}
 <div style="margin-top:20px;color:#999999;font-size:12px;">Pour ne plus recevoir ce type de message, <a href="${unsubscribeUrl}" style="color:#999999;">cliquez ici</a>.</div>
+${pixel}
 </body></html>`;
 }
 
 /** Version texte (fallback deliverability). */
-export function construireEmailTexte({ bien, messageAgent, unsubscribeUrl }: EmailParams): string {
-  const corps = messageAgent.replace(/\{\{\s*lien\s*\}\}/gi, lienAnnonce(bien));
+export function construireEmailTexte({ bien, messageAgent, unsubscribeUrl, token }: EmailParams): string {
+  const lien = token ? lienTracke(token) : lienAnnonce(bien);
+  const corps = messageAgent.replace(/\{\{\s*lien\s*\}\}/gi, lien);
   return [corps, '', `Se désinscrire : ${unsubscribeUrl}`].join('\n');
 }

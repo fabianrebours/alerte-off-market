@@ -12,7 +12,9 @@ import type { BienModelo } from './modelo/types.ts';
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = resolve(here, '../../data/app.db');
+// DB_PATH permet de pointer la base sur un disque persistant (ex. Render :
+// /var/data/app.db). Par défaut : data/app.db local au projet (dev).
+const DB_PATH = process.env.DB_PATH?.trim() || resolve(here, '../../data/app.db');
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db = new Database(DB_PATH);
@@ -93,6 +95,13 @@ db.exec(`
   if (!cols.some((c) => c.name === 'distance_km')) {
     db.exec('ALTER TABLE file_attente ADD COLUMN distance_km REAL');
   }
+}
+
+// Migration douce : suivi d'ouverture (pixel) et de clic (redirection) par envoi.
+{
+  const cols = db.prepare("PRAGMA table_info(envois)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'opened_at')) db.exec('ALTER TABLE envois ADD COLUMN opened_at TEXT');
+  if (!cols.some((c) => c.name === 'clicked_at')) db.exec('ALTER TABLE envois ADD COLUMN clicked_at TEXT');
 }
 
 export type StatutBien = 'nouveau' | 'envoye' | 'ignore';
@@ -218,6 +227,8 @@ export interface EnvoiRow {
   message_id: string | null;
   erreur: string | null;
   sent_at: string;
+  opened_at?: string | null;
+  clicked_at?: string | null;
 }
 
 export function recordEnvoi(e: Omit<EnvoiRow, 'id'>): void {
@@ -267,6 +278,46 @@ export function ajouterDesinscription(email: string, nowIso: string): void {
 export function emailParToken(token: string): string | null {
   const row = db.prepare<[string], { email: string }>('SELECT email FROM envois WHERE token = ? LIMIT 1').get(token);
   return row?.email ?? null;
+}
+
+// ── Tracking ouvertures / clics ────────────────────────────────────────
+/** product_ref de l'envoi porteur de ce token (pour rediriger le clic). */
+export function produitRefParToken(token: string): string | null {
+  const row = db.prepare<[string], { product_ref: string }>(
+    'SELECT product_ref FROM envois WHERE token = ? LIMIT 1',
+  ).get(token);
+  return row?.product_ref ?? null;
+}
+
+/** Marque la 1re ouverture (ne réécrit pas si déjà ouvert). Retourne true si nouveau. */
+export function marquerOuverture(token: string, nowIso: string): boolean {
+  return db.prepare('UPDATE envois SET opened_at = ? WHERE token = ? AND opened_at IS NULL')
+    .run(nowIso, token).changes > 0;
+}
+
+/** Marque le 1er clic (ne réécrit pas si déjà cliqué). Retourne true si nouveau. */
+export function marquerClic(token: string, nowIso: string): boolean {
+  return db.prepare('UPDATE envois SET clicked_at = ? WHERE token = ? AND clicked_at IS NULL')
+    .run(nowIso, token).changes > 0;
+}
+
+export interface StatsCampagne {
+  envoyes: number; // destinataires réellement contactés (envoye + test)
+  ouverts: number; // ont ouvert (≥1 fois)
+  cliques: number; // ont cliqué le lien (≥1 fois)
+}
+
+/** Stats d'engagement d'un bien : contactés, ouvertures uniques, clics uniques. */
+export function statsCampagne(productRef: string): StatsCampagne {
+  const row = db.prepare<[string], StatsCampagne>(
+    `SELECT
+       COUNT(*) AS envoyes,
+       COUNT(opened_at)  AS ouverts,
+       COUNT(clicked_at) AS cliques
+     FROM envois
+     WHERE product_ref = ? AND statut IN ('envoye','test')`,
+  ).get(productRef);
+  return row ?? { envoyes: 0, ouverts: 0, cliques: 0 };
 }
 
 // ── Tokens Google des agents (connexion in-app) ─────────────────────────

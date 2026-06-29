@@ -1,0 +1,71 @@
+# Blueprint Render — déploiement de l'app off-market.
+# Un seul web service Node : il sert l'API ET le front (dist/web).
+# La DB SQLite vit sur un DISQUE PERSISTANT (sinon stats/désinscriptions/tokens
+# Google effacés à chaque déploiement).
+services:
+  - type: web
+    name: alerte-off-market
+    runtime: node
+    region: frankfurt          # UE (RGPD), proche de Paris
+    plan: starter              # un disque persistant exige un plan payant (pas le free)
+    branch: main
+    # --include=dev : garantit tsx + vite (devDeps) pour le build ET le start
+    # (le start lance `tsx`). better-sqlite3 (natif) est compilé à l'install.
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    # Disque persistant monté sur /var/data → la DB y est stockée (DB_PATH ci-dessous).
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    # Noms EXACTS lus par src/server/config.ts. sync:false = à saisir dans le
+    # dashboard Render (copie les valeurs de ton .env local). PORT est injecté
+    # automatiquement par Render — ne pas le définir.
+    envVars:
+      - key: DB_PATH
+        value: /var/data/app.db          # base sur le disque persistant
+      - key: APP_BASE_URL
+        sync: false                       # ⚠ = l'URL publique Render (ex. https://alerte-off-market.onrender.com) après le 1er déploiement
+      - key: FRONT_API_TOKEN
+        sync: false
+      # ── Modelo (biens) ──
+      - key: MODELO_API_KEY
+        sync: false
+      - key: LP_BASE_URL
+        sync: false                       # ex. https://s3.fr-par.scw.cloud/crm-immo-prod/lp
+      # ── Omni (copropriétés ciblées) — indispensable ──
+      - key: OMNI_API_KEY
+        sync: false
+      - key: OMNI_INSTANCE_URL
+        sync: false
+      - key: OMNI_MODEL_ID
+        sync: false
+      # ── Envoi via Resend (fallback) ──
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      # ── Envoi via Gmail délégation de domaine (canal primaire) ──
+      - key: GOOGLE_SA_KEY_JSON
+        sync: false                       # JSON du compte de service (PAS un chemin de fichier sur Render)
+      - key: COMPTE_ENVOI_EMAIL
+        sync: false
+      - key: EXPEDITEUR_EMAIL
+        sync: false
+      - key: EXPEDITEUR_NOM
+        sync: false
+      # ── Envoi via token Google agent (si utilisé) ──
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_TOKEN_SECRET
+        sync: false
+      - key: CRM_DATABASE_URL
+        sync: false
+      # ── Bac à sable : '1' tant que tu testes, '0'/absent pour l'envoi réel ──
+      - key: ENVOI_SANDBOX
+        sync: false
+      - key: TEST_RECIPIENT
+        sync: false

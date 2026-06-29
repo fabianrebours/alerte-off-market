@@ -70,6 +70,12 @@ export interface Expedition {
   expediteur: string | null;
 }
 
+export interface StatsCampagne {
+  envoyes: number;
+  ouverts: number;
+  cliques: number;
+}
+
 export interface DetailReponse {
   detecte: BienDetecte;
   brouillon: { sujet: string; message: string };
@@ -78,6 +84,7 @@ export interface DetailReponse {
   nbEligibles: number;
   expedition: Expedition;
   lienAnnonce: string;
+  stats: StatsCampagne;
 }
 
 export interface Envoi {

@@ -7,6 +7,7 @@ import { config, statutIntegrations } from './config.ts';
 import { biensRouter } from './routes/biens.ts';
 import { optoutRouter } from './routes/optout.ts';
 import { oauthRouter } from './routes/oauth.ts';
+import { trackingRouter } from './routes/tracking.ts';
 import { demarrerCronModelo } from './modelo/poller.ts';
 import { demarrerCronFileAttente } from './email/fileAttente.ts';
 import { delegationDisponible } from './email/gmailDelegation.ts';
@@ -48,13 +49,15 @@ app.get('/api/statut', (_req, res) => {
 app.use('/api', biensRouter);
 app.use('/', optoutRouter);
 app.use('/', oauthRouter);
+app.use('/', trackingRouter); // /o (pixel ouverture) + /c (redirection clic)
 
 // Sert le build front en production (dist/web). En dev, c'est Vite qui sert.
 const webDist = resolve(here, '../../dist/web');
 if (existsSync(webDist)) {
   app.use(express.static(webDist));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path === '/desinscription' || req.path.startsWith('/oauth')) return next();
+    if (req.path.startsWith('/api') || req.path === '/desinscription' || req.path.startsWith('/oauth')
+      || req.path === '/o' || req.path === '/c') return next();
     res.sendFile(resolve(webDist, 'index.html'));
   });
 }
