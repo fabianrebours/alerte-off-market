@@ -13,6 +13,7 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [previewHtml, setPreviewHtml] = useState('');
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [testEnCours, setTestEnCours] = useState(false);
   const [resultat, setResultat] = useState<ResultatEnvoi | null>(null);
 
   const initialBrouillon = useRef({ sujet: '', message: '' });
@@ -85,6 +86,18 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
       setErreur((e as Error).message);
     } finally {
       setEnvoiEnCours(false);
+    }
+  };
+
+  const envoyerTest = async () => {
+    setTestEnCours(true);
+    try {
+      const r = await api.envoyerTest(refBien, sujet, message);
+      alert(`Email de test envoyé à ${r.destinataire}. (1 seul mail, sans toucher la campagne.)`);
+    } catch (e) {
+      setErreur((e as Error).message);
+    } finally {
+      setTestEnCours(false);
     }
   };
 
@@ -255,10 +268,16 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
             className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
           >{data.detecte.statut === 'ignore' ? 'Réactiver' : 'Ignorer ce bien'}</button>
           <button
+            onClick={envoyerTest}
+            disabled={testEnCours}
+            title="Envoie un seul email d'essai à ta propre adresse, sans démarrer la campagne"
+            className="px-4 py-2 text-sm text-matera-700 border border-matera-300 rounded-lg hover:bg-matera-50 disabled:opacity-40"
+          >{testEnCours ? 'Envoi…' : "M'envoyer 1 email de test"}</button>
+          <button
             onClick={envoyer}
             disabled={envoiEnCours || selection.size === 0}
             className="px-6 py-2 bg-matera-700 text-white rounded-lg text-sm font-semibold hover:bg-matera-900 disabled:opacity-40"
-          >{envoiEnCours ? 'Envoi…' : sandbox ? 'Envoyer (test)' : 'Envoyer'}</button>
+          >{envoiEnCours ? 'Envoi…' : sandbox ? 'Lancer la campagne (test)' : 'Lancer la campagne'}</button>
         </div>
       </div>
 

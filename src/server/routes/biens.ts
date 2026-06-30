@@ -15,6 +15,7 @@ import { rechercherCoprosVoisines, listerCoproprietaires, normaliserAdresse, typ
 import { geocodeAdresse } from '../geo/ban.ts';
 import { genererBrouillonDefaut, construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance, lienAnnonce } from '../email/template.ts';
 import { resoudreCanal } from '../email/canal.ts';
+import { verifierSession } from '../auth/session.ts';
 
 export const biensRouter = Router();
 
@@ -195,6 +196,35 @@ biensRouter.post('/biens/:ref/brouillon', (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: 'sujet et message requis' });
   setBrouillon(req.params.ref, parsed.data.sujet, parsed.data.message, now());
   res.json({ ok: true });
+});
+
+// ── Email de test à SOI-MÊME (l'utilisateur connecté) ───────────────────
+// Distinct de la campagne : un seul mail, vers l'email de la session SSO,
+// sans toucher la file ni les stats (pas de token de tracking, pas de recordEnvoi).
+const testSchema = z.object({ sujet: z.string().min(1), message: z.string().min(1) });
+biensRouter.post('/biens/:ref/test', async (req, res) => {
+  const detecte = getBienDetecte(req.params.ref);
+  if (!detecte) return res.status(404).json({ error: 'Bien introuvable' });
+  const parsed = testSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'sujet et message requis' });
+  // Destinataire = utilisateur connecté (session SSO) ; repli sur l'adresse de test.
+  const bearer = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+  const moi = verifierSession(bearer)?.email ?? config.testRecipient;
+  if (!moi) return res.status(400).json({ error: 'Connecte-toi en SSO pour recevoir un email de test.' });
+  const canalEnvoi = await resoudreCanal();
+  if (!canalEnvoi.envoyer) {
+    return res.status(400).json({ error: `Aucun canal d'envoi (ni délégation domaine, ni token Google, ni Resend).` });
+  }
+  const messageRendu = rendreMessage(parsed.data.message, formatDistance(0.2));
+  const unsubscribeUrl = `${config.appBaseUrl}/desinscription?token=apercu`;
+  const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
+  const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
+  try {
+    await canalEnvoi.envoyer({ to: moi, subject: `[ESSAI] ${parsed.data.sujet}`, html, text, unsubscribeUrl });
+    res.json({ ok: true, destinataire: moi });
+  } catch (e) {
+    res.status(502).json({ error: `Échec de l'envoi : ${(e as Error).message}` });
+  }
 });
 
 // ── Changer le statut (ignorer / réactiver) ─────────────────────────────

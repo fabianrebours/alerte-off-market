@@ -197,6 +197,10 @@ export const api = {
     req<ResultatEnvoi>(`/api/biens/${encodeURIComponent(ref)}/envoyer`, {
       method: 'POST', body: JSON.stringify({ sujet, message, destinataires }),
     }),
+  envoyerTest: (ref: string, sujet: string, message: string) =>
+    req<{ ok: true; destinataire: string }>(`/api/biens/${encodeURIComponent(ref)}/test`, {
+      method: 'POST', body: JSON.stringify({ sujet, message }),
+    }),
   envois: (ref?: string) => req<Envoi[]>(`/api/envois${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`),
   agentsConnectes: () => req<AgentConnecte[]>('/api/agents-connectes'),
   poll: () => req<{ nouveaux: number; total: number }>('/api/poll', { method: 'POST' }),
