@@ -139,6 +139,25 @@ export async function fetchBiensSurLeMarche(): Promise<BienModelo[]> {
     .filter((b): b is BienModelo => b !== null);
 }
 
+/**
+ * Récupère UN bien Modelo par sa référence (normalisation identique au poll).
+ * Sert à inclure manuellement un bien qui échappe au détecteur off-market
+ * (déjà diffusé, ou trop ancien). Renvoie null si introuvable/supprimé.
+ */
+export async function fetchBienParRef(ref: string): Promise<BienModelo | null> {
+  if (!config.modelo.apiKey) throw new Error('MODELO_API_KEY non configuré');
+  const params = new URLSearchParams({
+    relations: 'linked_user_id',
+    filters: `product_ref:equal:${ref}`,
+    limit: '1',
+  });
+  const resp = await modeloGet(`/products?${params.toString()}`);
+  const json = (await resp.json()) as { data?: ModeloProduct[] };
+  const brut = json.data?.[0];
+  if (!brut || brut.deleted || brut.archived) return null;
+  return normaliserBien(brut);
+}
+
 export type MandatType = 'simple' | 'semi_exclusif' | 'exclusif' | 'delegation';
 
 /**

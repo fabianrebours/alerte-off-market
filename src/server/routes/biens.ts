@@ -5,12 +5,12 @@ import { config } from '../config.ts';
 import {
   getBienDetecte, listBiensDetectes, setStatutBien, setBrouillon,
   listEnvois, recordEnvoi, emailDejaContactePourBien, emailContacteDepuis, listDesinscrits,
-  enqueueEnvoi, planningBien, countFileEnAttente, listAgentsConnectes, statsCampagne,
+  enqueueEnvoi, planningBien, countFileEnAttente, listAgentsConnectes, statsCampagne, upsertBienDetecte,
   type BienDetecte, type StatutBien,
 } from '../db.ts';
 import { traiterFileAttente } from '../email/fileAttente.ts';
 import { pollerModelo } from '../modelo/poller.ts';
-import { reinitialiserThrottleModelo } from '../modelo/client.ts';
+import { reinitialiserThrottleModelo, fetchBienParRef, fetchExclusivitesParProduit } from '../modelo/client.ts';
 import { rechercherCoprosVoisines, listerCoproprietaires, normaliserAdresse, type CoproVoisine } from '../omni/copros.ts';
 import { geocodeAdresse } from '../geo/ban.ts';
 import { genererBrouillonDefaut, construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance, lienAnnonce } from '../email/template.ts';
@@ -225,6 +225,25 @@ biensRouter.post('/biens/:ref/test', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: `Échec de l'envoi : ${(e as Error).message}` });
   }
+});
+
+// ── Inclure manuellement un bien par référence (contourne off-market/récence) ──
+// Pour les exceptions : un bien déjà diffusé ou trop ancien que le détecteur
+// n'ajoute pas. On le récupère chez Modelo et on l'insère en statut « nouveau ».
+biensRouter.post('/biens/:ref/inclure', async (req, res) => {
+  const ref = req.params.ref.trim();
+  let bien;
+  try {
+    bien = await fetchBienParRef(ref);
+  } catch (e) {
+    return res.status(502).json({ error: `Modelo : ${(e as Error).message}` });
+  }
+  if (!bien) return res.status(404).json({ error: `Bien ${ref} introuvable chez Modelo (ou supprimé).` });
+  // Type de mandat (best-effort — ne bloque pas l'inclusion si l'appel échoue).
+  const excl = await fetchExclusivitesParProduit(new Set([bien.productRef])).catch(() => null);
+  if (excl) bien.mandatType = excl.get(bien.productRef) ?? null;
+  const nouveau = upsertBienDetecte(bien, now());
+  res.json({ ok: true, nouveau, ref: bien.productRef, adresse: bien.adresse, mandatType: bien.mandatType, diffuse: bien.diffuse, nbPortails: bien.nbPortails });
 });
 
 // ── Changer le statut (ignorer / réactiver) ─────────────────────────────
