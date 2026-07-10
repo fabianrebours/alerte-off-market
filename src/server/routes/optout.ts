@@ -21,6 +21,20 @@ function page(titre: string, corps: string): string {
 const pageLienInvalide = () => page('Lien invalide',
   `<p style="color:#475569;font-size:15px;line-height:1.6;">Ce lien de désinscription n'est pas valide ou a expiré.</p>`);
 
+/** Jeton factice des « emails de test à soi-même » (voir routes/biens.ts). */
+const TOKEN_APERCU = 'apercu';
+
+const pageApercu = () => page('Aperçu — email d\'essai',
+  `<h1 style="color:#4A1214;font-size:20px;margin:0 0 12px;">Ceci est un email d'essai</h1>
+   <p style="color:#475569;font-size:15px;line-height:1.6;">
+     Ce lien provient d'un email de test envoyé à soi-même : il n'est rattaché à aucun
+     destinataire, il n'y a donc personne à désinscrire.
+   </p>
+   <p style="color:#475569;font-size:15px;line-height:1.6;">
+     Dans les envois de campagne, chaque destinataire reçoit un lien personnel
+     qui le désinscrit en un clic.
+   </p>`);
+
 const pageConfirmee = (email: string) => page('Désinscription confirmée',
   `<div style="color:#721C1F;font-size:40px;margin-bottom:12px;">✓</div>
    <h1 style="color:#4A1214;font-size:20px;margin:0 0 12px;">Vous êtes désinscrit·e</h1>
@@ -35,6 +49,7 @@ const pageConfirmee = (email: string) => page('Désinscription confirmée',
  */
 optoutRouter.get('/desinscription', (req, res) => {
   const token = String(req.query.token ?? '');
+  if (token === TOKEN_APERCU) return res.send(pageApercu());
   const email = token ? emailParToken(token) : null;
   if (!email) return res.status(400).send(pageLienInvalide());
   if (estDesinscrit(email)) return res.send(pageConfirmee(email));
@@ -57,6 +72,7 @@ optoutRouter.get('/desinscription', (req, res) => {
  */
 optoutRouter.post('/desinscription', (req, res) => {
   const token = String(req.query.token ?? '');
+  if (token === TOKEN_APERCU) return res.send(pageApercu());
   const email = token ? emailParToken(token) : null;
   if (!email) return res.status(400).send(pageLienInvalide());
   if (!estDesinscrit(email)) ajouterDesinscription(email, new Date().toISOString());

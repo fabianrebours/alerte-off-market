@@ -217,6 +217,7 @@ biensRouter.post('/biens/:ref/test', async (req, res) => {
     return res.status(400).json({ error: `Aucun canal d'envoi (ni délégation domaine, ni token Google, ni Resend).` });
   }
   const messageRendu = rendreMessage(parsed.data.message, formatDistance(0.2));
+  // Jeton factice : routes/optout.ts sert une page « aperçu » pour ce token.
   const unsubscribeUrl = `${config.appBaseUrl}/desinscription?token=apercu`;
   const html = construireEmailHtml({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
   const text = construireEmailTexte({ bien: detecte.bien, messageAgent: messageRendu, unsubscribeUrl });
