@@ -8,6 +8,7 @@ import {
 } from '../db.ts';
 import { resoudreCanal } from './canal.ts';
 import { construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance } from './template.ts';
+import { estJourOuvreParis } from './joursOuvres.ts';
 
 /**
  * Traite la file d'attente : envoie les lots dont le jour prévu est arrivé
@@ -18,6 +19,14 @@ import { construireEmailHtml, construireEmailTexte, rendreMessage, formatDistanc
 let drainEnCours = false;
 
 export async function traiterFileAttente(): Promise<{ traites: number; envoyes: number; erreurs: number; annules: number }> {
+  // Jours ouvrés uniquement en mode réel (lun-ven hors fériés français, date
+  // civile Paris) : les lots en retard restent en file et partent le prochain
+  // jour ouvré, toujours sous le cap journalier. En sandbox on draine tous les
+  // jours (mails de test uniquement).
+  if (!config.sandbox && !estJourOuvreParis(new Date())) {
+    console.log('[file] week-end ou jour férié — aucun envoi aujourd\'hui.');
+    return { traites: 0, envoyes: 0, erreurs: 0, annules: 0 };
+  }
   if (drainEnCours) {
     console.log('[file] drain déjà en cours — déclenchement ignoré (anti double-envoi).');
     return { traites: 0, envoyes: 0, erreurs: 0, annules: 0 };

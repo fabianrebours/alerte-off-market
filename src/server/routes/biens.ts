@@ -15,6 +15,7 @@ import { rechercherCoprosVoisines, listerCoproprietaires, normaliserAdresse, typ
 import { geocodeAdresse } from '../geo/ban.ts';
 import { genererBrouillonDefaut, construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance, lienAnnonce } from '../email/template.ts';
 import { resoudreCanal } from '../email/canal.ts';
+import { estJourOuvreParis } from '../email/joursOuvres.ts';
 import { verifierSession } from '../auth/session.ts';
 
 export const biensRouter = Router();
@@ -338,10 +339,13 @@ biensRouter.post('/biens/:ref/envoyer', async (req, res) => {
     }
   };
 
-  // 1) Premier lot (≤ tailleLot) : envoi immédiat.
+  // 1) Premier lot (≤ tailleLot) : envoi immédiat — sauf week-end/férié en
+  // mode réel (tout part alors en file, drainée le prochain jour ouvré).
+  // En sandbox on envoie quel que soit le jour (mails de test uniquement).
   const taille = config.tailleLot;
-  const maintenant = valides.slice(0, taille);
-  const aProgrammer = valides.slice(taille);
+  const envoiImmediat = config.sandbox || estJourOuvreParis(new Date());
+  const maintenant = envoiImmediat ? valides.slice(0, taille) : [];
+  const aProgrammer = envoiImmediat ? valides.slice(taille) : valides;
   let envoyes = 0, tests = 0, erreurs = 0;
   for (const d of maintenant) {
     const s = await envoyerUn(d);
@@ -349,8 +353,10 @@ biensRouter.post('/biens/:ref/envoyer', async (req, res) => {
   }
 
   // 2) Reste : programmé par lots de tailleLot, un lot par jour suivant.
+  // Si le 1er lot n'est pas parti (week-end/férié), il prend la date du jour :
+  // le drain (jours ouvrés uniquement) l'enverra au prochain jour ouvré.
   aProgrammer.forEach((d, i) => {
-    const jour = dateDansNJours(Math.floor(i / taille) + 1);
+    const jour = dateDansNJours(Math.floor(i / taille) + (envoiImmediat ? 1 : 0));
     enqueueEnvoi({
       product_ref: req.params.ref, email: d.email.toLowerCase(), prenom: d.prenom ?? null, nom: d.nom ?? null,
       commonhold_id: d.commonholdId ?? null, copro_adresse: d.coproAdresse ?? null, distance_km: d.distanceKm ?? null,
