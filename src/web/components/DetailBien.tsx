@@ -71,10 +71,9 @@ export function DetailBien({ refBien, sandbox, onRetour }: {
   };
 
   const envoyer = async () => {
-    const etale = selection.size > 30 ? ` Les 30 premiers partent maintenant, le reste est programmé (30/jour les jours suivants).` : '';
     if (!confirm(sandbox
-      ? `Mode bac à sable : ${selection.size} email(s) de test.${etale} Continuer ?`
-      : `Envoyer à ${selection.size} copropriétaire(s) ?${etale}`)) return;
+      ? `Mode bac à sable : ${selection.size} email(s) de test.${selection.size > 30 ? ' Les 30 premiers partent maintenant, le reste est programmé.' : ''} Continuer ?`
+      : `Envoyer à ${selection.size} copropriétaire(s) ? Les envois s'étalent automatiquement : ~4 par heure, 30/jour max, 9h-18h les jours ouvrés (hors fériés).`)) return;
     setEnvoiEnCours(true);
     setResultat(null);
     try {
