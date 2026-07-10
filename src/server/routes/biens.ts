@@ -15,7 +15,6 @@ import { rechercherCoprosVoisines, listerCoproprietaires, normaliserAdresse, typ
 import { geocodeAdresse } from '../geo/ban.ts';
 import { genererBrouillonDefaut, construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance, lienAnnonce } from '../email/template.ts';
 import { resoudreCanal } from '../email/canal.ts';
-import { estJourOuvreParis } from '../email/joursOuvres.ts';
 import { verifierSession } from '../auth/session.ts';
 
 export const biensRouter = Router();
@@ -340,36 +339,38 @@ biensRouter.post('/biens/:ref/envoyer', async (req, res) => {
     }
   };
 
-  // 1) Premier lot (≤ tailleLot) : envoi immédiat — sauf week-end/férié en
-  // mode réel (tout part alors en file, drainée le prochain jour ouvré).
-  // En sandbox on envoie quel que soit le jour (mails de test uniquement).
+  // Mode réel : TOUT part en file (lots de tailleLot par jour, 1er lot daté
+  // d'aujourd'hui), puis on déclenche un drain — la tranche de l'heure part
+  // tout de suite si la fenêtre (9h-18h Paris, jours ouvrés) est ouverte, le
+  // reste s'étale heure par heure via le cron. Rien ne part d'un coup et le
+  // cap journalier global est respecté même en validant plusieurs campagnes.
+  // Sandbox : 1er lot envoyé immédiatement (mails de test), reste programmé.
   const taille = config.tailleLot;
-  const envoiImmediat = config.sandbox || estJourOuvreParis(new Date());
-  const maintenant = envoiImmediat ? valides.slice(0, taille) : [];
-  const aProgrammer = envoiImmediat ? valides.slice(taille) : valides;
+  const programmer = (d: typeof valides[number], jour: string) => enqueueEnvoi({
+    product_ref: req.params.ref, email: d.email.toLowerCase(), prenom: d.prenom ?? null, nom: d.nom ?? null,
+    commonhold_id: d.commonholdId ?? null, copro_adresse: d.coproAdresse ?? null, distance_km: d.distanceKm ?? null,
+    sujet, message, jour_prevu: jour, created_at: now(),
+  });
   let envoyes = 0, tests = 0, erreurs = 0;
-  for (const d of maintenant) {
-    const s = await envoyerUn(d);
-    if (s === 'envoye') envoyes++; else if (s === 'test') tests++; else erreurs++;
+  if (config.sandbox) {
+    for (const d of valides.slice(0, taille)) {
+      const s = await envoyerUn(d);
+      if (s === 'envoye') envoyes++; else if (s === 'test') tests++; else erreurs++;
+    }
+    valides.slice(taille).forEach((d, i) => programmer(d, dateDansNJours(Math.floor(i / taille) + 1)));
+  } else {
+    valides.forEach((d, i) => programmer(d, dateDansNJours(Math.floor(i / taille))));
+    // NB : le drain traite la file GLOBALE (toutes campagnes dues confondues).
+    const drain = await traiterFileAttente();
+    envoyes = drain.envoyes; erreurs = drain.erreurs;
   }
 
-  // 2) Reste : programmé par lots de tailleLot, un lot par jour suivant.
-  // Si le 1er lot n'est pas parti (week-end/férié), il prend la date du jour :
-  // le drain (jours ouvrés uniquement) l'enverra au prochain jour ouvré.
-  aProgrammer.forEach((d, i) => {
-    const jour = dateDansNJours(Math.floor(i / taille) + (envoiImmediat ? 1 : 0));
-    enqueueEnvoi({
-      product_ref: req.params.ref, email: d.email.toLowerCase(), prenom: d.prenom ?? null, nom: d.nom ?? null,
-      commonhold_id: d.commonholdId ?? null, copro_adresse: d.coproAdresse ?? null, distance_km: d.distanceKm ?? null,
-      sujet, message, jour_prevu: jour, created_at: now(),
-    });
-  });
+  if (!config.sandbox && valides.length > 0) setStatutBien(req.params.ref, 'envoye', now());
 
-  if (!config.sandbox && (envoyes > 0 || aProgrammer.length > 0)) setStatutBien(req.params.ref, 'envoye', now());
-
+  const planning = planningBien(req.params.ref);
   res.json({
     sandbox: config.sandbox, canal: canalEnvoi.canal, source: canalEnvoi.source, expediteur: canalEnvoi.expediteur,
-    envoyes, tests, erreurs, ignores, programmes: aProgrammer.length, planning: planningBien(req.params.ref),
+    envoyes, tests, erreurs, ignores, programmes: planning.reduce((s, p) => s + p.count, 0), planning,
   });
   } finally {
     envoisEnCours.delete(req.params.ref);

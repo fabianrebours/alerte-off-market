@@ -23,9 +23,9 @@ La clé Netty est **toujours throttlée (401)** — reset quota côté Netty (jo
 ## ⚠️ Nouveau depuis cette session : auth API
 Après redémarrage du serveur (nouveau code), **l'UI demande le `FRONT_API_TOKEN`** au 1er accès (collé une fois, gardé dans le navigateur). Le jeton est dans `.env` (et `.env.example` documente `openssl rand -hex 32`). Tant que `FRONT_API_TOKEN` est vide, l'API reste ouverte (dev local).
 
-## Crons (inchangés)
+## Crons (mis à jour 2026-07-10)
 - **Poll Modelo** : tous les jours à **06:00** (`0 6 * * *`) — `src/server/modelo/poller.ts`. Pas de poll au démarrage.
-- **File d'envoi** : tous les jours à **09:00** (`0 9 * * *`) + rattrapage au démarrage — `src/server/email/fileAttente.ts`. Désormais : réentrance + reclaim + cap 30/j global au drain.
+- **File d'envoi** : **toutes les heures** (`0 * * * *`) + rattrapage au démarrage — `src/server/email/fileAttente.ts`. En mode réel : fenêtre **9h-18h Paris, jours ouvrés hors fériés français**, étalement **~4 envois/heure** (jamais de rafale), cap 30/j global, réentrance + reclaim. À la validation d'une campagne, tout part en file (plus d'envoi immédiat du 1er lot) et un drain est déclenché. En sandbox : drain complet à tout moment.
 
 ## Prochaines étapes
 1. Débloquer/attendre la clé Netty → **« Rafraîchir Modelo »** → vérifier biens + badge mandat.

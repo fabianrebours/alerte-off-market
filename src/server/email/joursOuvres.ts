@@ -62,6 +62,15 @@ export function joursFeriesFrance(annee: number): Set<string> {
   return feries;
 }
 
+/** Heure (0-23) de `date` dans le fuseau Europe/Paris. */
+export function heureParis(date: Date): number {
+  return Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).format(date));
+}
+
 /** Vrai si `date` tombe un jour ouvré à Paris : lundi-vendredi, hors fériés. */
 export function estJourOuvreParis(date: Date): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {
