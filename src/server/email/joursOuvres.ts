@@ -62,6 +62,34 @@ export function joursFeriesFrance(annee: number): Set<string> {
   return feries;
 }
 
+/**
+ * Les `nb` prochains jours ouvrés ('YYYY-MM-DD') à partir de la date civile
+ * Paris de `depuis` (incluse si elle est ouvrée). Sert à dater les lots de la
+ * file : le planning affiché correspond ainsi aux jours d'envoi réels.
+ */
+export function prochainsJoursOuvres(nb: number, depuis: Date): string[] {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(depuis);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  // Curseur à midi UTC : le jour de semaine d'une date civile ne dépend alors
+  // pas du fuseau, et l'heure d'été/hiver ne décale jamais la date.
+  const curseur = new Date(Date.UTC(get('year'), get('month') - 1, get('day'), 12));
+  const jours: string[] = [];
+  while (jours.length < nb) {
+    const jourSemaine = curseur.getUTCDay(); // 0 = dimanche, 6 = samedi
+    const cle = `${curseur.getUTCFullYear()}-${pad2(curseur.getUTCMonth() + 1)}-${pad2(curseur.getUTCDate())}`;
+    if (jourSemaine !== 0 && jourSemaine !== 6 && !joursFeriesFrance(curseur.getUTCFullYear()).has(cle)) {
+      jours.push(cle);
+    }
+    curseur.setUTCDate(curseur.getUTCDate() + 1);
+  }
+  return jours;
+}
+
 /** Heure (0-23) de `date` dans le fuseau Europe/Paris. */
 export function heureParis(date: Date): number {
   return Number(new Intl.DateTimeFormat('en-US', {

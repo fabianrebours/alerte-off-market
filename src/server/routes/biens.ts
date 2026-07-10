@@ -15,6 +15,7 @@ import { rechercherCoprosVoisines, listerCoproprietaires, normaliserAdresse, typ
 import { geocodeAdresse } from '../geo/ban.ts';
 import { genererBrouillonDefaut, construireEmailHtml, construireEmailTexte, rendreMessage, formatDistance, lienAnnonce } from '../email/template.ts';
 import { resoudreCanal } from '../email/canal.ts';
+import { prochainsJoursOuvres } from '../email/joursOuvres.ts';
 import { verifierSession } from '../auth/session.ts';
 
 export const biensRouter = Router();
@@ -359,7 +360,10 @@ biensRouter.post('/biens/:ref/envoyer', async (req, res) => {
     }
     valides.slice(taille).forEach((d, i) => programmer(d, dateDansNJours(Math.floor(i / taille) + 1)));
   } else {
-    valides.forEach((d, i) => programmer(d, dateDansNJours(Math.floor(i / taille))));
+    // Lots datés sur les JOURS OUVRÉS (le drain n'envoie que ces jours-là) :
+    // le planning affiché correspond aux jours d'envoi réels.
+    const jours = prochainsJoursOuvres(Math.ceil(valides.length / taille), new Date());
+    valides.forEach((d, i) => programmer(d, jours[Math.floor(i / taille)]));
     // NB : le drain traite la file GLOBALE (toutes campagnes dues confondues).
     const drain = await traiterFileAttente();
     envoyes = drain.envoyes; erreurs = drain.erreurs;
